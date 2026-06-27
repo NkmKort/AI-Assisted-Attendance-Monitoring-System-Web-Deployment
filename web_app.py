@@ -272,7 +272,7 @@ if page == "📊 Live Dashboard":
                     f"""<div style="background:#fff7ed;border-left:3px solid #f97316;
                         padding:8px 12px;border-radius:6px;margin-bottom:6px;color:#451a03;">
                         <b>{row['Student_Name']}</b> &nbsp; {flag_html}
-                        <span style="float:right;color:#94a3b8;font-size:12px">
+                        <span style="float:right;color:#000000;font-size:12px">
                             {synced_icon} {ts_str}
                         </span></div>""",
                     unsafe_allow_html=True,
