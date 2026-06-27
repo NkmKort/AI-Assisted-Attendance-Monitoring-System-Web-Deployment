@@ -270,7 +270,7 @@ if page == "📊 Live Dashboard":
                 synced_icon = "☁️" if row["Cloud_Synced"] else "💾"
                 st.markdown(
                     f"""<div style="background:#fff7ed;border-left:3px solid #f97316;
-                        padding:8px 12px;border-radius:6px;margin-bottom:6px;">
+                        padding:8px 12px;border-radius:6px;margin-bottom:6px;color:#451a03;">
                         <b>{row['Student_Name']}</b> &nbsp; {flag_html}
                         <span style="float:right;color:#94a3b8;font-size:12px">
                             {synced_icon} {ts_str}
@@ -317,11 +317,23 @@ if page == "📊 Live Dashboard":
 
     st.divider()
     st.subheader("Full Attendance Log")
-    search_q = st.text_input("🔍 Filter by student name", placeholder="e.g. CORPUZ")
-    filtered = (
-        df[df["Student_Name"].astype(str).str.contains(search_q, case=False)]
-        if search_q else df
-    )
+    col_f1, col_f2 = st.columns([2, 1])
+    with col_f1:
+        search_q = st.text_input("🔍 Filter by student name", placeholder="e.g. CORPUZ")
+    with col_f2:
+        if not df.empty and "Timestamp" in df.columns:
+            available_dates = sorted(df["Timestamp"].dropna().dt.date.unique(), reverse=True)
+            date_options = ["All Days"] + [d.strftime("%Y-%m-%d") for d in available_dates]
+        else:
+            date_options = ["All Days"]
+        selected_date_str = st.selectbox("📅 Filter by day", date_options, index=0)
+
+    filtered = df.copy()
+    if search_q:
+        filtered = filtered[filtered["Student_Name"].astype(str).str.contains(search_q, case=False)]
+    if selected_date_str != "All Days":
+        sel_date = datetime.strptime(selected_date_str, "%Y-%m-%d").date()
+        filtered = filtered[filtered["Timestamp"].dt.date == sel_date]
 
     total_pages = max(1, math.ceil(len(filtered) / PAGE_SIZE))
     pg1, pg2, _ = st.columns([1, 2, 6])
