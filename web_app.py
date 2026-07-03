@@ -750,7 +750,9 @@ elif page == "📋 Compliance Report":
             col_date, col_email = st.columns([1, 2])
 
             with col_date:
-                available_dates = sorted(full_df["_date"].unique(), reverse=True)
+                # Drop nulls/NaT values so python can sort cleanly
+                clean_dates = full_df["_date"].dropna().unique()
+                available_dates = sorted([d for d in clean_dates if not pd.isna(d)], reverse=True)
                 default_date = available_dates[0] if available_dates else date.today()
                 selected_date = st.date_input(
                     "Report Date",
