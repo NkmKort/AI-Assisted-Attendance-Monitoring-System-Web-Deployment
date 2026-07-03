@@ -313,27 +313,38 @@ with tab3:
         report_date = st.session_state["report_date"]
 
         with st.expander("📄 Part 1 — Formal Administrative Report (Word Document)", expanded=True):
-            st.text_area(
+            edited_report = st.text_area(
                 label="Word Report",
                 value=st.session_state["report_word"],
                 height=500,
+                key="report_word_editor",
                 label_visibility="collapsed",
             )
-            docx_bytes = dr.export_to_docx(st.session_state["report_word"], report_date)
-            st.download_button(
-                label="⬇️ Download as .docx",
-                data=docx_bytes,
-                file_name=f"compliance_report_{report_date}.docx",
-                mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
-            )
+            c_dl, c_sv = st.columns([1, 1])
+            with c_dl:
+                docx_bytes = dr.export_to_docx(edited_report, report_date)
+                st.download_button(
+                    label="⬇️ Download as .docx",
+                    data=docx_bytes,
+                    file_name=f"compliance_report_{report_date}.docx",
+                    mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                )
+            with c_sv:
+                if st.button("💾 Save Report Draft Changes", key="save_report_draft"):
+                    st.session_state["report_word"] = edited_report
+                    st.success("Report draft changes saved!")
 
         with st.expander("✉️ Part 2 — Email Draft", expanded=True):
-            st.text_area(
+            edited_email = st.text_area(
                 label="Email Draft",
                 value=st.session_state["report_email"],
                 height=300,
+                key="report_email_editor",
                 label_visibility="collapsed",
             )
+            if st.button("💾 Save Email Draft Changes", key="save_email_draft"):
+                st.session_state["report_email"] = edited_email
+                st.success("Email draft changes saved!")
 
             st.divider()
 
@@ -342,7 +353,7 @@ with tab3:
                 if not recipient_email or "@" not in recipient_email:
                     st.error("Enter a valid recipient email address at the top of the page first.")
                 else:
-                    docx_bytes = dr.export_to_docx(st.session_state["report_word"], report_date)
+                    docx_bytes = dr.export_to_docx(edited_report, report_date)
                     filename = f"compliance_report_{report_date}.docx"
                     subject = f"Daily Compliance Report — {report_date}"
                     with st.spinner(f"Sending email to {recipient_email}..."):
@@ -350,7 +361,7 @@ with tab3:
                             dr.send_email(
                                 recipient=recipient_email,
                                 subject=subject,
-                                body=st.session_state["report_email"],
+                                body=edited_email,
                                 docx_bytes=docx_bytes,
                                 docx_filename=filename,
                             )
