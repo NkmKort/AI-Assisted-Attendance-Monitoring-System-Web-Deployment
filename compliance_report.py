@@ -320,7 +320,7 @@ with tab3:
                 key="report_word_editor",
                 label_visibility="collapsed",
             )
-            c_dl, c_sv = st.columns([1, 1])
+            c_dl, c_spacer, c_sv = st.columns([1.5, 4.5, 2])
             with c_dl:
                 docx_bytes = dr.export_to_docx(edited_report, report_date)
                 st.download_button(
@@ -328,9 +328,10 @@ with tab3:
                     data=docx_bytes,
                     file_name=f"compliance_report_{report_date}.docx",
                     mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    use_container_width=True,
                 )
             with c_sv:
-                if st.button("💾 Save Report Draft Changes", key="save_report_draft"):
+                if st.button("💾 Save Report Edits", key="save_report_draft", use_container_width=True):
                     st.session_state["report_word"] = edited_report
                     st.success("Report draft changes saved!")
 
@@ -342,9 +343,11 @@ with tab3:
                 key="report_email_editor",
                 label_visibility="collapsed",
             )
-            if st.button("💾 Save Email Draft Changes", key="save_email_draft"):
-                st.session_state["report_email"] = edited_email
-                st.success("Email draft changes saved!")
+            c_em_spacer, c_em_sv = st.columns([6, 2])
+            with c_em_sv:
+                if st.button("💾 Save Email Edits", key="save_email_draft", use_container_width=True):
+                    st.session_state["report_email"] = edited_email
+                    st.success("Email draft changes saved!")
 
             st.divider()
 
