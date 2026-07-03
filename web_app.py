@@ -39,6 +39,7 @@ import plotly.express as px
 import streamlit as st
 from dotenv import load_dotenv
 from supabase import create_client, Client
+import daily_report as dr
 
 from langchain_cohere import ChatCohere, CohereEmbeddings
 from langchain_community.vectorstores import FAISS
@@ -202,7 +203,7 @@ with st.sidebar:
     page = st.radio(
         "Navigate",
         ["📊 Live Dashboard", "📈 Analytics", "👤 Student Profiles",
-         "🖥️ Hardware Monitor", "🤖 AI Assistant"],
+         "🖥️ Hardware Monitor", "🤖 AI Assistant", "📋 Compliance Report"],
         label_visibility="collapsed",
     )
     st.divider()
@@ -718,3 +719,163 @@ USER QUESTION:
                     st.caption("No queries yet.")
             else:
                 st.caption("Ask a question first.")
+
+
+# ══════════════════════════════════════════════════════════════════════════════
+# PAGE 6 — COMPLIANCE REPORT
+# ══════════════════════════════════════════════════════════════════════════════
+
+elif page == "📋 Compliance Report":
+    st.header("📋 Daily Compliance Report Generator")
+    st.markdown(
+        "Select a date, enter a recipient email, and click *Generate Report* "
+        "to produce an AI-written formal report and email draft powered by Cohere Command."
+    )
+
+    with st.spinner("Loading AI components..."):
+        try:
+            vector_store, generator_llm, judge_llm = load_ai_components()
+            ai_ready = True
+        except Exception as e:
+            st.error(f"Could not load AI models: {e}")
+            ai_ready = False
+
+    if ai_ready:
+        full_df = dr.load_and_prepare()
+
+        if full_df.empty:
+            st.warning("No attendance records found in Supabase. Check your connection or tables.")
+        else:
+            # ── Row 1: Date picker + Email input ─────────────────────────────────
+            col_date, col_email = st.columns([1, 2])
+
+            with col_date:
+                available_dates = sorted(full_df["_date"].unique(), reverse=True)
+                default_date = available_dates[0] if available_dates else date.today()
+                selected_date = st.date_input(
+                    "Report Date",
+                    value=default_date,
+                    min_value=min(available_dates) if available_dates else date.today(),
+                    max_value=date.today(),
+                )
+
+            with col_email:
+                recipient_email = st.text_input(
+                    "Recipient Email Address",
+                    placeholder="discipline.office@mapua.edu.ph",
+                )
+
+            # ── Filtered data for selected date ──────────────────────────────────
+            daily_df = dr.filter_by_date(full_df, selected_date)
+            stats = dr.build_stats(daily_df)
+
+            st.divider()
+
+            # ── Metrics row ───────────────────────────────────────────────────────
+            m1, m2, m3, m4 = st.columns(4)
+            m1.metric("Students Logged", stats["total"])
+            m2.metric("Fully Compliant", stats["compliant"])
+            m3.metric("Missing ID", stats["lanyard_violations"])
+            m4.metric("Dress Code Violations", stats["dress_violations"])
+
+            # ── Filtered table ────────────────────────────────────────────────────
+            if daily_df.empty:
+                st.info(
+                    f"No attendance records found for *{selected_date}*. "
+                    "This may be a weekend, holiday, or a date before the system was deployed."
+                )
+            else:
+                # Clean columns to display beautifully
+                disp_df = daily_df.copy()
+                for col in ["Cloud_Synced", "Lanyard_Compliant", "DressCode_Compliant"]:
+                    if col in disp_df.columns:
+                        disp_df[col] = disp_df[col].apply(lambda v: "✅" if v else "❌")
+                if "Timestamp" in disp_df.columns:
+                    disp_df["Timestamp"] = disp_df["Timestamp"].dt.strftime("%Y-%m-%d %H:%M:%S")
+                # Drop internal _date column
+                if "_date" in disp_df.columns:
+                    disp_df = disp_df.drop(columns=["_date"])
+                st.dataframe(disp_df, use_container_width=True, hide_index=True)
+
+            st.divider()
+
+            # ── Generate Report button ────────────────────────────────────────────
+            generate_clicked = st.button("Generate Report", type="primary", disabled=daily_df.empty)
+
+            if generate_clicked:
+                if not recipient_email or "@" not in recipient_email:
+                    st.error("Please enter a valid recipient email address before generating the report.")
+                else:
+                    with st.spinner("Retrieving handbook policies and generating report via Cohere..."):
+                        try:
+                            word_report, email_draft = dr.generate_report(
+                                llm=generator_llm,
+                                vector_store=vector_store,
+                                selected_date=selected_date,
+                                recipient_email=recipient_email,
+                                daily_df=daily_df,
+                            )
+                            st.session_state["report_word"] = word_report
+                            st.session_state["report_email"] = email_draft
+                            st.session_state["report_date"] = selected_date
+                        except Exception as e:
+                            st.error(f"Report generation failed: {e}")
+
+            # ── Render outputs (persisted across reruns) ──────────────────────────
+            if "report_word" in st.session_state and st.session_state.get("report_date") == selected_date:
+                report_date = st.session_state["report_date"]
+
+                with st.expander("📄 Part 1 — Formal Administrative Report (Word Document)", expanded=True):
+                    st.text_area(
+                        label="Word Report",
+                        value=st.session_state["report_word"],
+                        height=400,
+                        label_visibility="collapsed",
+                    )
+                    docx_bytes = dr.export_to_docx(st.session_state["report_word"], report_date)
+                    st.download_button(
+                        label="⬇️ Download as .docx",
+                        data=docx_bytes,
+                        file_name=f"compliance_report_{report_date}.docx",
+                        mime="application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                    )
+
+                with st.expander("✉️ Part 2 — Email Draft", expanded=True):
+                    st.text_area(
+                        label="Email Draft",
+                        value=st.session_state["report_email"],
+                        height=250,
+                        label_visibility="collapsed",
+                    )
+
+                    st.divider()
+
+                    send_clicked = st.button("Send Email Now", type="primary")
+                    if send_clicked:
+                        if not recipient_email or "@" not in recipient_email:
+                            st.error("Enter a valid recipient email address at the top of the page first.")
+                        else:
+                            docx_bytes = dr.export_to_docx(st.session_state["report_word"], report_date)
+                            filename = f"compliance_report_{report_date}.docx"
+                            subject = f"Daily Compliance Report — {report_date}"
+                            with st.spinner(f"Sending email to {recipient_email}..."):
+                                try:
+                                    dr.send_email(
+                                        recipient=recipient_email,
+                                        subject=subject,
+                                        body=st.session_state["report_email"],
+                                        docx_bytes=docx_bytes,
+                                        docx_filename=filename,
+                                    )
+                                    st.success(f"Email sent successfully to *{recipient_email}*.")
+                                except ValueError as e:
+                                    st.error(str(e))
+                                    st.info(
+                                        "*Setup required:* Add these two lines to your .env file (or Streamlit Secrets):\n\n"
+                                        "```\nSMTP_SENDER=your_gmail@gmail.com\n"
+                                        "SMTP_PASSWORD=xxxx xxxx xxxx xxxx\n```\n\n"
+                                        "The password must be a *Gmail App Password*, not your account password. "
+                                        "Generate one at: *Google Account → Security → 2-Step Verification → App Passwords*."
+                                    )
+                                except Exception as e:
+                                    st.error(f"Failed to send email: {e}")

@@ -13,3 +13,4 @@ datasets
 ragas
 sentence-transformers
 torchvision
+python-docx
